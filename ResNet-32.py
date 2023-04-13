@@ -149,9 +149,9 @@ class BasicBlock(nn.Module):
         return out
 
 
-class ResNet18(nn.Module):
+class ResNet32(nn.Module):
     def __init__(self, num_classes=8):  # Change the default value of num_classes to 8
-        super(ResNet18, self).__init__()
+        super(ResNet32, self).__init__()
 
         self.in_planes = 64
 
@@ -160,10 +160,10 @@ class ResNet18(nn.Module):
         self.bn1 = nn.BatchNorm2d(64)
 
         # ResNet blocks
-        self.layer1 = self._make_layer(64, 2, stride=1)
-        self.layer2 = self._make_layer(128, 2, stride=2)
-        self.layer3 = self._make_layer(256, 2, stride=2)
-        self.layer4 = self._make_layer(512, 2, stride=2)
+        self.layer1 = self._make_layer(64, 5, stride=1)  # 5 BasicBlocks
+        self.layer2 = self._make_layer(128, 5, stride=2)  # 5 BasicBlocks
+        self.layer3 = self._make_layer(256, 5, stride=2)  # 5 BasicBlocks
+        self.layer4 = self._make_layer(512, 5, stride=2)  # 5 BasicBlocks
 
         # Final fully connected layer
         self.linear = nn.Linear(512, num_classes)
@@ -183,10 +183,10 @@ class ResNet18(nn.Module):
         return nn.Sequential(*layers)
 
     def forward(self, x):
-    # First convolutional layer
+        # First convolutional layer
         out = F.relu(self.bn1(self.conv1(x)))
 
-    # ResNet blocks
+        # ResNet blocks
         out = self.layer1(out)
         out = self.layer2(out)
         out = self.layer3(out)
@@ -201,7 +201,7 @@ class ResNet18(nn.Module):
         # Fully connected layer
         out = self.linear(out)
 
-        return out  
+        return out
 
 
 
@@ -279,7 +279,7 @@ if __name__ == '__main__':
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
-    model = ResNet18()
+    model = ResNet32()
     model = model.to(device)
 
     optimizer = torch.optim.SGD(model.parameters(), lr=0.03)
@@ -575,7 +575,8 @@ if __name__ == '__main__':
     trainer = CustomTrainer(optimizer=optimizer, loss_fn=loss_fn, device=device, max_epochs=10)
     train_and_evaluate(trainer, model)
     # Save the model's state_dict
-    torch.save(model.state_dict(), 'resnet18_trained.pth')
+    torch.save(model.state_dict(), 'resnet32_trained.pth')
+
 
 
 
