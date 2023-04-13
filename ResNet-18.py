@@ -10,7 +10,10 @@ from d2l import torch as d2l
 import torch
 import numpy as np
 from multiprocessing.spawn import freeze_support
-from sklearn.model_selection import train_test_split
+from random import sample
+
+
+
 
 df = pd.read_csv("./labels.csv")
 
@@ -65,7 +68,13 @@ file_path_label_pairs = list(zip(file_paths, labels))
 random.shuffle(file_path_label_pairs)
 
 def split_data(test_size=0.2):
-    train_data, val_data = train_test_split(file_path_label_pairs, test_size=test_size, random_state=42)
+    data_size = len(file_path_label_pairs)
+    test_size = int(test_size * data_size)
+    test_indices = sample(range(data_size), test_size)
+    train_indices = [i for i in range(data_size) if i not in test_indices]
+
+    train_data = [file_path_label_pairs[i] for i in train_indices]
+    val_data = [file_path_label_pairs[i] for i in test_indices]
 
     train_dataset = ImageDataset(train_data, transform=transform)
     val_dataset = ImageDataset(val_data, transform=transform)
@@ -74,6 +83,7 @@ def split_data(test_size=0.2):
     val_loader = DataLoader(val_dataset, batch_size=128, shuffle=True, num_workers=4)
 
     return train_loader, val_loader
+
 
 def train_and_evaluate(trainer, model):
     train_loader, val_loader = split_data(test_size=0.2)
@@ -183,10 +193,11 @@ class ResNet18(nn.Module):
 
 
 class CustomTrainer(d2l.Trainer):
-    def __init__(self, optimizer, loss_fn, *args, **kwargs):
+    def __init__(self, optimizer, loss_fn, device, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.optimizer = optimizer
         self.loss = loss_fn
+        self.device = device
         self.train_losses = []
         self.val_losses = []
     
@@ -208,7 +219,7 @@ class CustomTrainer(d2l.Trainer):
             train_loss = 0
             num_batches = 0
             for X, y in train_loader:
-                #X, y = X.to(self.device), y.to(self.device)
+                X, y = X.to(self.device), y.to(self.device)
                 self.optimizer.zero_grad()
                 y_hat = model(X)
                 l = self.loss(y_hat, y)
@@ -226,8 +237,13 @@ class CustomTrainer(d2l.Trainer):
 
 if __name__ == '__main__':
     freeze_support()
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    
     model = ResNet18()
+    model = model.to(device)
+
     optimizer = torch.optim.SGD(model.parameters(), lr=0.03)
     loss_fn = torch.nn.BCEWithLogitsLoss()
-    trainer = CustomTrainer(optimizer=optimizer, loss_fn=loss_fn, max_epochs=5)
+    trainer = CustomTrainer(optimizer=optimizer, loss_fn=loss_fn, device=device, max_epochs=5)
     train_and_evaluate(trainer, model)
