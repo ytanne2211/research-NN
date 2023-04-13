@@ -14,7 +14,6 @@ from random import sample
 
 
 
-
 df = pd.read_csv("./labels.csv")
 
 transform = transforms.Compose([
@@ -88,12 +87,26 @@ def split_data(test_size=0.2):
 def train_and_evaluate(trainer, model):
     train_loader, val_loader = split_data(test_size=0.2)
     trainer.fit(model, train_loader, val_loader)
+
+    # Plot Training and Validation Loss
+    plt.figure(figsize=(10, 6))
+    plt.subplot(2, 1, 1)
     plt.plot(trainer.train_losses, label="Training Loss")
     plt.plot(trainer.val_losses, label="Validation Loss")
     plt.xlabel("Epochs")
     plt.ylabel("Loss")
     plt.legend()
+
+    # Plot Training and Validation Accuracy
+    plt.subplot(2, 1, 2)
+    plt.plot(trainer.train_accuracies, label="Training Accuracy")
+    plt.plot(trainer.val_accuracies, label="Validation Accuracy")
+    plt.xlabel("Epochs")
+    plt.ylabel("Accuracy")
+    plt.legend()
+
     plt.show()
+
 
 class BasicBlock(nn.Module):
     expansion = 1
@@ -200,24 +213,38 @@ class CustomTrainer(d2l.Trainer):
         self.device = device
         self.train_losses = []
         self.val_losses = []
+        self.train_accuracies = []
+        self.val_accuracies = []
     
-    def evaluate_loss(self, val_loader):
+    def evaluate_loss_and_accuracy(self, loader):
         model.eval()
         total_loss = 0
+        total_correct = 0
         num_batches = 0
+        num_samples = 0
         with torch.no_grad():
-            for X, y in val_loader:
+            for X, y in loader:
+                X, y = X.to(self.device), y.to(self.device)
                 y_hat = model(X)
                 l = self.loss(y_hat, y)
                 total_loss += l.item()
+                
+                # Calculate accuracy
+                pred_indices = torch.argmax(y_hat, dim=1)
+                true_indices = torch.argmax(y, dim=1)
+                total_correct += (pred_indices == true_indices).sum().item()
+                num_samples += y.size(0)
+                
                 num_batches += 1
-        return total_loss / num_batches
+        return total_loss / num_batches, total_correct / num_samples
 
     def fit(self, model, train_loader, val_loader):
         for epoch in range(self.max_epochs):
             model.train()
             train_loss = 0
+            train_correct = 0
             num_batches = 0
+            num_samples = 0
             for X, y in train_loader:
                 X, y = X.to(self.device), y.to(self.device)
                 self.optimizer.zero_grad()
@@ -226,13 +253,25 @@ class CustomTrainer(d2l.Trainer):
                 l.backward()
                 self.optimizer.step()
                 train_loss += l.item()
+
+                # Calculate accuracy
+                pred_indices = torch.argmax(y_hat, dim=1)
+                true_indices = torch.argmax(y, dim=1)
+                train_correct += (pred_indices == true_indices).sum().item()
+                num_samples += y.size(0)
+
                 num_batches += 1
                 print(f"Batch {num_batches}, Training loss: {l.item():.4f}")
             avg_train_loss = train_loss / num_batches
+            train_accuracy = train_correct / num_samples
             self.train_losses.append(avg_train_loss)
-            val_loss = self.evaluate_loss(val_loader)
+            self.train_accuracies.append(train_accuracy)
+            
+            val_loss, val_accuracy = self.evaluate_loss_and_accuracy(val_loader)
             self.val_losses.append(val_loss)
-            print(f"Epoch {epoch + 1}, Average Training loss: {avg_train_loss:.4f}, Validation loss: {val_loss:.4f}")
+            self.val_accuracies.append(val_accuracy)
+            
+            print(f"Epoch {epoch + 1}, Average Training loss: {avg_train_loss:.4f}, Training accuracy: {train_accuracy:.4f}, Validation loss: {val_loss:.4f}, Validation accuracy: {val_accuracy:.4f}")
 
 
 if __name__ == '__main__':
@@ -245,5 +284,5 @@ if __name__ == '__main__':
 
     optimizer = torch.optim.SGD(model.parameters(), lr=0.03)
     loss_fn = torch.nn.BCEWithLogitsLoss()
-    trainer = CustomTrainer(optimizer=optimizer, loss_fn=loss_fn, device=device, max_epochs=5)
+    trainer = CustomTrainer(optimizer=optimizer, loss_fn=loss_fn, device=device, max_epochs=10)
     train_and_evaluate(trainer, model)
