@@ -11,12 +11,16 @@ import torch
 import numpy as np
 from multiprocessing.spawn import freeze_support
 from random import sample
+from torch.optim.lr_scheduler import StepLR
 
 
 
 df = pd.read_csv("./labels.csv")
 
 transform = transforms.Compose([
+    transforms.RandomHorizontalFlip(),
+    transforms.RandomRotation(10),
+    transforms.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.4, hue=0.1),
     transforms.Resize((32, 32)),
     transforms.ToTensor(),
     transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
@@ -282,11 +286,15 @@ if __name__ == '__main__':
     model = ResNet32()
     model = model.to(device)
 
-    optimizer = torch.optim.SGD(model.parameters(), lr=0.03)
+    # added L2 Regularization - prevent overfitting
+    optimizer = torch.optim.SGD(model.parameters(), lr=0.03, weight_decay=0.0001)
+    #adjusted step size
+    scheduler = StepLR(optimizer, step_size=5, gamma=0.1)
     loss_fn = torch.nn.BCEWithLogitsLoss()
-    trainer = CustomTrainer(optimizer=optimizer, loss_fn=loss_fn, device=device, max_epochs=10)
+    trainer = CustomTrainer(optimizer=optimizer, loss_fn=loss_fn, device=device, max_epochs=50)
     train_and_evaluate(trainer, model)
     # Save the model's state_dict
-    torch.save(model.state_dict(), 'resnet32_trained.pth')
+    torch.save(model.state_dict(), 'resnet18(mod1)_trained.pth')
+   
 
     
