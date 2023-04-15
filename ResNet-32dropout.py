@@ -11,7 +11,7 @@ import torch
 import numpy as np
 from multiprocessing.spawn import freeze_support
 from random import sample
-from torch.optim.lr_scheduler import StepLR
+
 
 
 
@@ -109,13 +109,13 @@ def train_and_evaluate(trainer, model):
     plt.ylabel("Accuracy")
     plt.legend()
 
-    plt.show()
+    plt.savefig()
 
 
 class BasicBlock(nn.Module):
     expansion = 1
 
-    def __init__(self, in_planes, planes, stride=1):
+    def __init__(self, in_planes, planes, stride=1, dropout_rate=0.5):
         super(BasicBlock, self).__init__()
 
         # First convolutional layer
@@ -129,6 +129,9 @@ class BasicBlock(nn.Module):
         # Shortcut connection
         self.shortcut = nn.Sequential()
 
+        # Add a dropout layer
+        self.dropout = nn.Dropout(dropout_rate)
+
         # If the input number of channels or the stride is different from the output number of channels,
         # then we need to perform a 1x1 convolution to change the number of channels or downsample the input
         if stride != 1 or in_planes != self.expansion*planes:
@@ -139,7 +142,7 @@ class BasicBlock(nn.Module):
 
     def forward(self, x):
         # First convolutional layer
-        out = F.relu(self.bn1(self.conv1(x)))
+        out = self.dropout(F.relu(self.bn1(self.conv1(x))))
 
         # Second convolutional layer
         out = self.bn2(self.conv2(out))
@@ -152,9 +155,8 @@ class BasicBlock(nn.Module):
 
         return out
 
-
 class ResNet32(nn.Module):
-    def __init__(self, num_classes=8):  # Change the default value of num_classes to 8
+    def __init__(self, num_classes=8, dropout_rate=0.5):
         super(ResNet32, self).__init__()
 
         self.in_planes = 64
@@ -163,24 +165,24 @@ class ResNet32(nn.Module):
         self.conv1 = nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1, bias=False)
         self.bn1 = nn.BatchNorm2d(64)
 
-        # ResNet blocks
-        self.layer1 = self._make_layer(64, 5, stride=1)  # 5 BasicBlocks
-        self.layer2 = self._make_layer(128, 5, stride=2)  # 5 BasicBlocks
-        self.layer3 = self._make_layer(256, 5, stride=2)  # 5 BasicBlocks
-        self.layer4 = self._make_layer(512, 5, stride=2)  # 5 BasicBlocks
+        # ResNet blocks with dropout
+        self.layer1 = self._make_layer(64, 5, stride=1, dropout_rate=dropout_rate)
+        self.layer2 = self._make_layer(128, 5, stride=2, dropout_rate=dropout_rate)
+        self.layer3 = self._make_layer(256, 5, stride=2, dropout_rate=dropout_rate)
+        self.layer4 = self._make_layer(512, 5, stride=2, dropout_rate=dropout_rate)
 
         # Final fully connected layer
         self.linear = nn.Linear(512, num_classes)
 
-    def _make_layer(self, planes, num_blocks, stride):
+    def _make_layer(self, planes, num_blocks, stride, dropout_rate):
         # Create a list of stride values for each BasicBlock in this layer
         strides = [stride] + [1]*(num_blocks-1)
 
         layers = []
         for stride in strides:
             # Create a BasicBlock with the specified number of input and output channels,
-            # and the specified stride value
-            layers.append(BasicBlock(self.in_planes, planes, stride))
+            # the specified stride value, and the specified dropout rate
+            layers.append(BasicBlock(self.in_planes, planes, stride, dropout_rate=dropout_rate))
             self.in_planes = planes * BasicBlock.expansion
 
         # Return a Sequential container that contains all the BasicBlocks in this layer
@@ -283,18 +285,17 @@ if __name__ == '__main__':
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
-    model = ResNet32()
+    model = ResNet32(num_classes=8, dropout_rate=0.5)
     model = model.to(device)
 
     # added L2 Regularization - prevent overfitting
     optimizer = torch.optim.SGD(model.parameters(), lr=0.03, weight_decay=0.0001)
     #adjusted step size
-    scheduler = StepLR(optimizer, step_size=5, gamma=0.1)
     loss_fn = torch.nn.BCEWithLogitsLoss()
-    trainer = CustomTrainer(optimizer=optimizer, loss_fn=loss_fn, device=device, max_epochs=50)
+    trainer = CustomTrainer(optimizer=optimizer, loss_fn=loss_fn, device=device, max_epochs=100)
     train_and_evaluate(trainer, model)
     # Save the model's state_dict
-    torch.save(model.state_dict(), 'resnet32(mod1)_trained.pth')
+    torch.save(model.state_dict(), 'resnet32-dropout_trained.pth')
    
 
     
