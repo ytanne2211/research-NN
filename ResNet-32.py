@@ -109,7 +109,7 @@ def train_and_evaluate(trainer, model):
     plt.ylabel("Accuracy")
     plt.legend()
 
-    plt.show()
+    plt.savefig("accuracyResNet32.png")
 
 
 class BasicBlock(nn.Module):
@@ -287,11 +287,11 @@ if __name__ == '__main__':
     model = model.to(device)
 
     # added L2 Regularization - prevent overfitting
-    optimizer = torch.optim.SGD(model.parameters(), lr=0.03, weight_decay=0.0001)
+    optimizer = torch.optim.SGD(model.parameters(), lr=0.002, weight_decay=0.08)
     #adjusted step size
-    scheduler = StepLR(optimizer, step_size=5, gamma=0.1)
-    loss_fn = torch.nn.BCEWithLogitsLoss()
-    trainer = CustomTrainer(optimizer=optimizer, loss_fn=loss_fn, device=device, max_epochs=50)
+    scheduler = StepLR(optimizer, step_size=10, gamma=0.5)
+    loss_fn = torch.nn.CrossEntropyLoss()
+    trainer = CustomTrainer(optimizer=optimizer, loss_fn=loss_fn, device=device, max_epochs=100)
     train_and_evaluate(trainer, model)
     # Save the model's state_dict
     torch.save(model.state_dict(), 'resnet32(mod1)_trained.pth')

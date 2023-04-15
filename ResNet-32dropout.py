@@ -18,9 +18,6 @@ from random import sample
 df = pd.read_csv("./labels.csv")
 
 transform = transforms.Compose([
-    transforms.RandomHorizontalFlip(),
-    transforms.RandomRotation(10),
-    transforms.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.4, hue=0.1),
     transforms.Resize((32, 32)),
     transforms.ToTensor(),
     transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
@@ -115,7 +112,7 @@ def train_and_evaluate(trainer, model):
 class BasicBlock(nn.Module):
     expansion = 1
 
-    def __init__(self, in_planes, planes, stride=1, dropout_rate=0.5):
+    def __init__(self, in_planes, planes, stride=1, dropout_rate=0.2):
         super(BasicBlock, self).__init__()
 
         # First convolutional layer
@@ -156,7 +153,7 @@ class BasicBlock(nn.Module):
         return out
 
 class ResNet32(nn.Module):
-    def __init__(self, num_classes=8, dropout_rate=0.5):
+    def __init__(self, num_classes=8, dropout_rate=0.2):
         super(ResNet32, self).__init__()
 
         self.in_planes = 64
@@ -285,13 +282,13 @@ if __name__ == '__main__':
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
-    model = ResNet32(num_classes=8, dropout_rate=0.5)
+    model = ResNet32(num_classes=8, dropout_rate=0.2)
     model = model.to(device)
 
     # added L2 Regularization - prevent overfitting
-    optimizer = torch.optim.SGD(model.parameters(), lr=0.03, weight_decay=0.0001)
+    optimizer = torch.optim.SGD(model.parameters(), lr=0.001, weight_decay=0.0001)
     #adjusted step size
-    loss_fn = torch.nn.BCEWithLogitsLoss()
+    loss_fn = torch.nn.nn.CrossEntropyLoss()
     trainer = CustomTrainer(optimizer=optimizer, loss_fn=loss_fn, device=device, max_epochs=100)
     train_and_evaluate(trainer, model)
     # Save the model's state_dict
