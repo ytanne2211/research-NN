@@ -287,8 +287,7 @@ if __name__ == '__main__':
 
     # added L2 Regularization - prevent overfitting
     optimizer = torch.optim.SGD(model.parameters(), lr=0.001, weight_decay=0.0001)
-    #adjusted step size
-    loss_fn = torch.nn.nn.CrossEntropyLoss()
+    loss_fn = torch.nn.CrossEntropyLoss()
     trainer = CustomTrainer(optimizer=optimizer, loss_fn=loss_fn, device=device, max_epochs=100)
     train_and_evaluate(trainer, model)
     # Save the model's state_dict
