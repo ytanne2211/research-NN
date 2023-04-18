@@ -18,7 +18,10 @@ from random import sample
 df = pd.read_csv("./labels.csv")
 
 transform = transforms.Compose([
-    transforms.Resize((32, 32)),
+    transforms.RandomHorizontalFlip(),
+    transforms.RandomRotation(10),
+    transforms.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.4, hue=0.1),
+    transforms.Resize((96, 96)),
     transforms.ToTensor(),
     transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
 ])
@@ -67,52 +70,98 @@ file_path_label_pairs = list(zip(file_paths, labels))
 # Shuffle the list of file path and label pairs
 random.shuffle(file_path_label_pairs)
 
-def split_data(test_size=0.2):
+# def split_data(test_size=0.2):
+#     data_size = len(file_path_label_pairs)
+#     test_size = int(test_size * data_size)
+#     test_indices = sample(range(data_size), test_size)
+#     train_indices = [i for i in range(data_size) if i not in test_indices]
+
+#     train_data = [file_path_label_pairs[i] for i in train_indices]
+#     val_data = [file_path_label_pairs[i] for i in test_indices]
+
+#     train_dataset = ImageDataset(train_data, transform=transform)
+#     val_dataset = ImageDataset(val_data, transform=transform)
+
+#     train_loader = DataLoader(train_dataset, batch_size=128, shuffle=True, num_workers=4)
+#     val_loader = DataLoader(val_dataset, batch_size=128, shuffle=True, num_workers=4)
+
+#     return train_loader, val_loader
+
+def get_k_fold_indices(data_size, k):
+    fold_size = data_size // k
+    indices = list(range(data_size))
+    np.random.shuffle(indices)
+    return [indices[i * fold_size: (i + 1) * fold_size] for i in range(k)]
+
+def k_fold_cross_validation(k, model):
+    all_train_losses = []
+    all_train_accuracies = []
+    all_val_losses = []
+    all_val_accuracies = []
     data_size = len(file_path_label_pairs)
-    test_size = int(test_size * data_size)
-    test_indices = sample(range(data_size), test_size)
-    train_indices = [i for i in range(data_size) if i not in test_indices]
+    fold_indices = get_k_fold_indices(data_size, k)
 
-    train_data = [file_path_label_pairs[i] for i in train_indices]
-    val_data = [file_path_label_pairs[i] for i in test_indices]
+    for i in range(k):
+        print(f"Fold {i + 1}:")
 
-    train_dataset = ImageDataset(train_data, transform=transform)
-    val_dataset = ImageDataset(val_data, transform=transform)
+        val_indices = fold_indices[i]
+        train_indices = [j for j in range(data_size) if j not in val_indices]
 
-    train_loader = DataLoader(train_dataset, batch_size=128, shuffle=True, num_workers=4)
-    val_loader = DataLoader(val_dataset, batch_size=128, shuffle=True, num_workers=4)
+        train_data = [file_path_label_pairs[j] for j in train_indices]
+        val_data = [file_path_label_pairs[j] for j in val_indices]
 
-    return train_loader, val_loader
+        train_dataset = ImageDataset(train_data, transform=transform)
+        val_dataset = ImageDataset(val_data, transform=transform)
+
+        train_loader = DataLoader(train_dataset, batch_size=128, shuffle=True, num_workers=4)
+        val_loader = DataLoader(val_dataset, batch_size=128, shuffle=True, num_workers=4)
+
+        # Reset the model's state_dict
+        model.load_state_dict(torch.load('resnet32_initial.pth'))
+
+        # Initialize a new optimizer and set the trainer's optimizer
+        optimizer = torch.optim.Adam(model.parameters(), lr=0.001, weight_decay=0.0001)
+        trainer.optimizer = optimizer
+
+        train_losses, train_accuracies, val_losses, val_accuracies = trainer.fit(model, train_loader, val_loader)
+
+        all_train_losses.append(train_losses)
+        all_train_accuracies.append(train_accuracies)
+        all_val_losses.append(val_losses)
+        all_val_accuracies.append(val_accuracies)
+
+        print("\n")
+    return all_train_losses, all_train_accuracies, all_val_losses, all_val_accuracies
 
 
-def train_and_evaluate(trainer, model):
-    train_loader, val_loader = split_data(test_size=0.2)
-    trainer.fit(model, train_loader, val_loader)
+# def train_and_evaluate(trainer, model):
+#     train_loader, val_loader = split_data(test_size=0.2)
+#     trainer.fit(model, train_loader, val_loader)
 
-    # Plot Training and Validation Loss
-    plt.figure(figsize=(10, 6))
-    plt.subplot(2, 1, 1)
-    plt.plot(trainer.train_losses, label="Training Loss")
-    plt.plot(trainer.val_losses, label="Validation Loss")
-    plt.xlabel("Epochs")
-    plt.ylabel("Loss")
-    plt.legend()
+#     # Plot Training and Validation Loss
+#     plt.figure(figsize=(10, 6))
+#     plt.subplot(2, 1, 1)
+#     plt.plot(trainer.train_losses, label="Training Loss")
+#     plt.plot(trainer.val_losses, label="Validation Loss")
+#     plt.xlabel("Epochs")
+#     plt.ylabel("Loss")
+#     plt.legend()
 
-    # Plot Training and Validation Accuracy
-    plt.subplot(2, 1, 2)
-    plt.plot(trainer.train_accuracies, label="Training Accuracy")
-    plt.plot(trainer.val_accuracies, label="Validation Accuracy")
-    plt.xlabel("Epochs")
-    plt.ylabel("Accuracy")
-    plt.legend()
+#     # Plot Training and Validation Accuracy
+#     plt.subplot(2, 1, 2)
+#     plt.plot(trainer.train_accuracies, label="Training Accuracy")
+#     plt.plot(trainer.val_accuracies, label="Validation Accuracy")
+#     plt.xlabel("Epochs")
+#     plt.ylabel("Accuracy")
+#     plt.legend()
 
-    plt.savefig()
+#     plt.savefig()
 
 
 class BasicBlock(nn.Module):
     expansion = 1
 
-    def __init__(self, in_planes, planes, stride=1, dropout_rate=0.2):
+    def __init__(self, in_planes, planes, stride=1, dropout_rate=0.3):
         super(BasicBlock, self).__init__()
 
         # First convolutional layer
@@ -153,7 +202,7 @@ class BasicBlock(nn.Module):
         return out
 
 class ResNet32(nn.Module):
-    def __init__(self, num_classes=8, dropout_rate=0.2):
+    def __init__(self, num_classes=8, dropout_rate=0.3):
         super(ResNet32, self).__init__()
 
         self.in_planes = 64
@@ -196,7 +245,7 @@ class ResNet32(nn.Module):
         out = self.layer4(out)
 
         # Average pooling
-        out = F.avg_pool2d(out, 4)
+        out = F.adaptive_avg_pool2d(out, (1, 1))
 
         # Flatten
         out = out.view(out.size(0), -1)
@@ -242,6 +291,11 @@ class CustomTrainer(d2l.Trainer):
         return total_loss / num_batches, total_correct / num_samples
 
     def fit(self, model, train_loader, val_loader):
+        train_losses = []
+        train_accuracies = []
+        val_losses = []
+        val_accuracies = []
+        
         for epoch in range(self.max_epochs):
             model.train()
             train_loss = 0
@@ -267,31 +321,54 @@ class CustomTrainer(d2l.Trainer):
                 print(f"Batch {num_batches}, Training loss: {l.item():.4f}")
             avg_train_loss = train_loss / num_batches
             train_accuracy = train_correct / num_samples
-            self.train_losses.append(avg_train_loss)
-            self.train_accuracies.append(train_accuracy)
+            train_losses.append(avg_train_loss)
+            train_accuracies.append(train_accuracy)
             
             val_loss, val_accuracy = self.evaluate_loss_and_accuracy(val_loader)
-            self.val_losses.append(val_loss)
-            self.val_accuracies.append(val_accuracy)
+            val_losses.append(val_loss)
+            val_accuracies.append(val_accuracy)
             
             print(f"Epoch {epoch + 1}, Average Training loss: {avg_train_loss:.4f}, Training accuracy: {train_accuracy:.4f}, Validation loss: {val_loss:.4f}, Validation accuracy: {val_accuracy:.4f}")
+
+        return train_losses, train_accuracies, val_losses, val_accuracies
+
+
+    def plot_metrics(self):
+        plt.figure(figsize=(10, 6))
+        plt.subplot(2, 1, 1)
+        plt.plot(self.train_losses, label="Training Loss")
+        plt.plot(self.val_losses, label="Validation Loss")
+        plt.xlabel("Epochs")
+        plt.ylabel("Loss")
+        plt.legend()
+
+        plt.subplot(2, 1, 2)
+        plt.plot(self.train_accuracies, label="Training Accuracy")
+        plt.plot(self.val_accuracies, label="Validation Accuracy")
+        plt.xlabel("Epochs")
+        plt.ylabel("Accuracy")
+        plt.legend()
+
+        plt.savefig("metrics_plot.png")
+        plt.show()
 
 
 if __name__ == '__main__':
     freeze_support()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    
-    model = ResNet32(num_classes=8, dropout_rate=0.2)
+
+    model = ResNet32(num_classes=8, dropout_rate=0.3)
     model = model.to(device)
 
-    # added L2 Regularization - prevent overfitting
-    optimizer = torch.optim.SGD(model.parameters(), lr=0.001, weight_decay=0.0001)
+    # Save the initial model's state_dict for later use
+    torch.save(model.state_dict(), 'resnet32_initial.pth')
+
     loss_fn = torch.nn.CrossEntropyLoss()
-    trainer = CustomTrainer(optimizer=optimizer, loss_fn=loss_fn, device=device, max_epochs=100)
-    train_and_evaluate(trainer, model)
-    # Save the model's state_dict
-    torch.save(model.state_dict(), 'resnet32-dropout_trained.pth')
+    trainer = CustomTrainer(optimizer=None, loss_fn=loss_fn, device=device, max_epochs=100)
+
+    train_losses, train_accuracies, val_losses, val_accuracies = k_fold_cross_validation(3, model)
+    trainer.plot_metrics()
    
 
     
