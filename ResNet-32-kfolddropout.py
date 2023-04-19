@@ -21,7 +21,7 @@ transform = transforms.Compose([
     transforms.RandomHorizontalFlip(),
     transforms.RandomRotation(10),
     transforms.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.4, hue=0.1),
-    transforms.Resize((96, 96)),
+    transforms.Resize((32, 32)),
     transforms.ToTensor(),
     transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
 ])
@@ -126,7 +126,7 @@ def k_fold_cross_validation(k, model):
         model.apply(init_weights_he)
 
         # Initialize a new optimizer and set the trainer's optimizer
-        optimizer = torch.optim.Adam(model.parameters(), lr=0.0001, weight_decay=0.001)
+        optimizer = torch.optim.Adam(model.parameters(), lr=1e-4, weight_decay=1e-5)
         trainer.optimizer = optimizer
 
         train_losses, train_accuracies, val_losses, val_accuracies = trainer.fit(model, train_loader, val_loader)
@@ -167,7 +167,7 @@ def k_fold_cross_validation(k, model):
 class BasicBlock(nn.Module):
     expansion = 1
 
-    def __init__(self, in_planes, planes, stride=1, dropout_rate=0.2):
+    def __init__(self, in_planes, planes, stride=1, dropout_rate=0.35):
         super(BasicBlock, self).__init__()
 
         # First convolutional layer
@@ -208,7 +208,7 @@ class BasicBlock(nn.Module):
         return out
 
 class ResNet32(nn.Module):
-    def __init__(self, num_classes=8, dropout_rate=0.2):
+    def __init__(self, num_classes=8, dropout_rate=0.35):
         super(ResNet32, self).__init__()
 
         self.in_planes = 64
@@ -364,11 +364,11 @@ if __name__ == '__main__':
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    model = ResNet32(num_classes=8, dropout_rate=0.2)
+    model = ResNet32(num_classes=8, dropout_rate=0.35)
     model = model.to(device)
 
     # Save the initial model's state_dict for later use
-    torch.save(model.state_dict(), 'resnet32_initial.pth')
+    torch.save(model.state_dict(), 'resnet32_ex2_initial.pth')
 
     loss_fn = torch.nn.CrossEntropyLoss()
     trainer = CustomTrainer(optimizer=None, loss_fn=loss_fn, device=device, max_epochs=100)
@@ -385,3 +385,4 @@ if __name__ == '__main__':
 
 
     
+

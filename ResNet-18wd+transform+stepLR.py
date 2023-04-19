@@ -11,7 +11,6 @@ import torch
 import numpy as np
 from multiprocessing.spawn import freeze_support
 from random import sample
-from torch.optim.lr_scheduler import StepLR
 
 
 
@@ -26,7 +25,6 @@ transform = transforms.Compose([
     transforms.ToTensor(),
     transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
 ])
-
 
 label_to_index = {
     "happy": 0,
@@ -72,57 +70,110 @@ file_path_label_pairs = list(zip(file_paths, labels))
 # Shuffle the list of file path and label pairs
 random.shuffle(file_path_label_pairs)
 
-def split_data(test_size=0.2):
+# def split_data(test_size=0.2):
+#     data_size = len(file_path_label_pairs)
+#     test_size = int(test_size * data_size)
+#     test_indices = sample(range(data_size), test_size)
+#     train_indices = [i for i in range(data_size) if i not in test_indices]
+
+#     train_data = [file_path_label_pairs[i] for i in train_indices]
+#     val_data = [file_path_label_pairs[i] for i in test_indices]
+
+#     train_dataset = ImageDataset(train_data, transform=transform)
+#     val_dataset = ImageDataset(val_data, transform=transform)
+
+#     train_loader = DataLoader(train_dataset, batch_size=128, shuffle=True, num_workers=4)
+#     val_loader = DataLoader(val_dataset, batch_size=128, shuffle=True, num_workers=4)
+
+#     return train_loader, val_loader
+
+def init_weights_he(m):
+    if isinstance(m, nn.Conv2d) or isinstance(m, nn.Linear):
+        nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+        if m.bias is not None:
+            nn.init.constant_(m.bias, 0)
+
+def get_k_fold_indices(data_size, k):
+    fold_size = data_size // k
+    indices = list(range(data_size))
+    np.random.shuffle(indices)
+    return [indices[i * fold_size: (i + 1) * fold_size] for i in range(k)]
+
+def k_fold_cross_validation(k, model):
+    all_train_losses = []
+    all_train_accuracies = []
+    all_val_losses = []
+    all_val_accuracies = []
     data_size = len(file_path_label_pairs)
-    test_size = int(test_size * data_size)
-    test_indices = sample(range(data_size), test_size)
-    train_indices = [i for i in range(data_size) if i not in test_indices]
+    fold_indices = get_k_fold_indices(data_size, k)
 
-    train_data = [file_path_label_pairs[i] for i in train_indices]
-    val_data = [file_path_label_pairs[i] for i in test_indices]
+    for i in range(k):
+        print(f"Fold {i + 1}:")
 
-    train_dataset = ImageDataset(train_data, transform=transform)
-    val_dataset = ImageDataset(val_data, transform=transform)
+        val_indices = fold_indices[i]
+        train_indices = [j for j in range(data_size) if j not in val_indices]
 
-    train_loader = DataLoader(train_dataset, batch_size=128, shuffle=True, num_workers=4)
-    val_loader = DataLoader(val_dataset, batch_size=128, shuffle=True, num_workers=4)
+        train_data = [file_path_label_pairs[j] for j in train_indices]
+        val_data = [file_path_label_pairs[j] for j in val_indices]
 
-    return train_loader, val_loader
+        train_dataset = ImageDataset(train_data, transform=transform)
+        val_dataset = ImageDataset(val_data, transform=transform)
+
+        train_loader = DataLoader(train_dataset, batch_size=128, shuffle=True, num_workers=4)
+        val_loader = DataLoader(val_dataset, batch_size=128, shuffle=True, num_workers=4)
+
+        
+        model.apply(init_weights_he)
+
+        # Initialize a new optimizer and set the trainer's optimizer
+        optimizer = torch.optim.Adam(model.parameters(), lr=1e-4, weight_decay=1e-5)
+        trainer.optimizer = optimizer
+
+        train_losses, train_accuracies, val_losses, val_accuracies = trainer.fit(model, train_loader, val_loader)
+
+        all_train_losses.append(train_losses)
+        all_train_accuracies.append(train_accuracies)
+        all_val_losses.append(val_losses)
+        all_val_accuracies.append(val_accuracies)
+
+        print("\n")
+    return all_train_losses, all_train_accuracies, all_val_losses, all_val_accuracies
 
 
-def train_and_evaluate(trainer, model):
-    train_loader, val_loader = split_data(test_size=0.2)
-    trainer.fit(model, train_loader, val_loader)
+# def train_and_evaluate(trainer, model):
+#     train_loader, val_loader = split_data(test_size=0.2)
+#     trainer.fit(model, train_loader, val_loader)
 
-    # Plot Training and Validation Loss
-    plt.figure(figsize=(10, 6))
-    plt.subplot(2, 1, 1)
-    plt.plot(trainer.train_losses, label="Training Loss")
-    plt.plot(trainer.val_losses, label="Validation Loss")
-    plt.xlabel("Epochs")
-    plt.ylabel("Loss")
-    plt.legend()
+#     # Plot Training and Validation Loss
+#     plt.figure(figsize=(10, 6))
+#     plt.subplot(2, 1, 1)
+#     plt.plot(trainer.train_losses, label="Training Loss")
+#     plt.plot(trainer.val_losses, label="Validation Loss")
+#     plt.xlabel("Epochs")
+#     plt.ylabel("Loss")
+#     plt.legend()
 
-    # Plot Training and Validation Accuracy
-    plt.subplot(2, 1, 2)
-    plt.plot(trainer.train_accuracies, label="Training Accuracy")
-    plt.plot(trainer.val_accuracies, label="Validation Accuracy")
-    plt.xlabel("Epochs")
-    plt.ylabel("Accuracy")
-    plt.legend()
+#     # Plot Training and Validation Accuracy
+#     plt.subplot(2, 1, 2)
+#     plt.plot(trainer.train_accuracies, label="Training Accuracy")
+#     plt.plot(trainer.val_accuracies, label="Validation Accuracy")
+#     plt.xlabel("Epochs")
+#     plt.ylabel("Accuracy")
+#     plt.legend()
 
-    plt.show()
+#     plt.savefig()
 
 
 class BasicBlock(nn.Module):
     expansion = 1
 
-    def __init__(self, in_planes, planes, stride=1):
+    def __init__(self, in_planes, planes, stride=1, dropout_rate=0.2):
         super(BasicBlock, self).__init__()
 
         # First convolutional layer
         self.conv1 = nn.Conv2d(in_planes, planes, kernel_size=3, stride=stride, padding=1, bias=False)
         self.bn1 = nn.BatchNorm2d(planes)
+        self.dropout = nn.Dropout(dropout_rate)
 
         # Second convolutional layer
         self.conv2 = nn.Conv2d(planes, planes, kernel_size=3, stride=1, padding=1, bias=False)
@@ -142,6 +193,7 @@ class BasicBlock(nn.Module):
     def forward(self, x):
         # First convolutional layer
         out = F.relu(self.bn1(self.conv1(x)))
+        out = self.dropout(out)
 
         # Second convolutional layer
         out = self.bn2(self.conv2(out))
@@ -155,8 +207,9 @@ class BasicBlock(nn.Module):
         return out
 
 
+
 class ResNet18(nn.Module):
-    def __init__(self, num_classes=8):  # Change the default value of num_classes to 8
+    def __init__(self, num_classes=8, dropout_rate=0.2):  # Add dropout_rate parameter
         super(ResNet18, self).__init__()
 
         self.in_planes = 64
@@ -174,7 +227,7 @@ class ResNet18(nn.Module):
         # Final fully connected layer
         self.linear = nn.Linear(512, num_classes)
 
-    def _make_layer(self, planes, num_blocks, stride):
+    def _make_layer(self, planes, num_blocks, stride, dropout_rate):  # Add dropout_rate parameter
         # Create a list of stride values for each BasicBlock in this layer
         strides = [stride] + [1]*(num_blocks-1)
 
@@ -182,7 +235,7 @@ class ResNet18(nn.Module):
         for stride in strides:
             # Create a BasicBlock with the specified number of input and output channels,
             # and the specified stride value
-            layers.append(BasicBlock(self.in_planes, planes, stride))
+            layers.append(BasicBlock(self.in_planes, planes, stride, dropout_rate=dropout_rate))  # Pass dropout_rate to BasicBlock
             self.in_planes = planes * BasicBlock.expansion
 
         # Return a Sequential container that contains all the BasicBlocks in this layer
@@ -199,7 +252,7 @@ class ResNet18(nn.Module):
         out = self.layer4(out)
 
         # Average pooling
-        out = F.avg_pool2d(out, 4)
+        out = F.adaptive_avg_pool2d(out, (1, 1))
 
         # Flatten
         out = out.view(out.size(0), -1)
@@ -245,6 +298,11 @@ class CustomTrainer(d2l.Trainer):
         return total_loss / num_batches, total_correct / num_samples
 
     def fit(self, model, train_loader, val_loader):
+        train_losses = []
+        train_accuracies = []
+        val_losses = []
+        val_accuracies = []
+        
         for epoch in range(self.max_epochs):
             model.train()
             train_loss = 0
@@ -268,34 +326,64 @@ class CustomTrainer(d2l.Trainer):
 
                 num_batches += 1
                 print(f"Batch {num_batches}, Training loss: {l.item():.4f}")
-            scheduler.step()
             avg_train_loss = train_loss / num_batches
             train_accuracy = train_correct / num_samples
-            self.train_losses.append(avg_train_loss)
-            self.train_accuracies.append(train_accuracy)
+            train_losses.append(avg_train_loss)
+            train_accuracies.append(train_accuracy)
             
             val_loss, val_accuracy = self.evaluate_loss_and_accuracy(val_loader)
-            self.val_losses.append(val_loss)
-            self.val_accuracies.append(val_accuracy)
+            val_losses.append(val_loss)
+            val_accuracies.append(val_accuracy)
             
             print(f"Epoch {epoch + 1}, Average Training loss: {avg_train_loss:.4f}, Training accuracy: {train_accuracy:.4f}, Validation loss: {val_loss:.4f}, Validation accuracy: {val_accuracy:.4f}")
+
+        return train_losses, train_accuracies, val_losses, val_accuracies
+
+
+    def plot_metrics(self):
+        plt.figure(figsize=(10, 6))
+        plt.subplot(2, 1, 1)
+        plt.plot(self.train_losses, label="Training Loss")
+        plt.plot(self.val_losses, label="Validation Loss")
+        plt.xlabel("Epochs")
+        plt.ylabel("Loss")
+        plt.legend()
+
+        plt.subplot(2, 1, 2)
+        plt.plot(self.train_accuracies, label="Training Accuracy")
+        plt.plot(self.val_accuracies, label="Validation Accuracy")
+        plt.xlabel("Epochs")
+        plt.ylabel("Accuracy")
+        plt.legend()
+
+        plt.savefig("metrics_plot3.png")
+        plt.show()
 
 
 if __name__ == '__main__':
     freeze_support()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    
-    model = ResNet18()
+
+    model = ResNet18(num_classes=8, dropout_rate=0.2)
     model = model.to(device)
 
-    # added L2 Regularization - prevent overfitting
-    optimizer = torch.optim.SGD(model.parameters(), lr=0.002, weight_decay=0.08)
-    #adjusted step size
-    scheduler = StepLR(optimizer, step_size=10, gamma=0.5)
-    loss_fn = torch.nn.BCEWithLogitsLoss()
-    trainer = CustomTrainer(optimizer=optimizer, loss_fn=loss_fn, device=device, max_epochs=100)
-    train_and_evaluate(trainer, model)
-    # Save the model's state_dict
-    torch.save(model.state_dict(), 'resnet18(mod1)_trained.pth')
-   
+    # Save the initial model's state_dict for later use
+    torch.save(model.state_dict(), 'resnet18_ex3_initial.pth')
+
+    loss_fn = torch.nn.CrossEntropyLoss()
+    trainer = CustomTrainer(optimizer=None, loss_fn=loss_fn, device=device, max_epochs=100)
+
+    train_losses, train_accuracies, val_losses, val_accuracies = k_fold_cross_validation(3, model)
+
+    # Update trainer's attributes with the average values from k-fold cross-validation
+    trainer.train_losses = [np.mean(epoch_losses) for epoch_losses in zip(*train_losses)]
+    trainer.train_accuracies = [np.mean(epoch_accuracies) for epoch_accuracies in zip(*train_accuracies)]
+    trainer.val_losses = [np.mean(epoch_losses) for epoch_losses in zip(*val_losses)]
+    trainer.val_accuracies = [np.mean(epoch_accuracies) for epoch_accuracies in zip(*val_accuracies)]
+
+    trainer.plot_metrics()
+
+
+    
+
