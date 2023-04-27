@@ -70,22 +70,7 @@ file_path_label_pairs = list(zip(file_paths, labels))
 # Shuffle the list of file path and label pairs
 random.shuffle(file_path_label_pairs)
 
-# def split_data(test_size=0.2):
-#     data_size = len(file_path_label_pairs)
-#     test_size = int(test_size * data_size)
-#     test_indices = sample(range(data_size), test_size)
-#     train_indices = [i for i in range(data_size) if i not in test_indices]
 
-#     train_data = [file_path_label_pairs[i] for i in train_indices]
-#     val_data = [file_path_label_pairs[i] for i in test_indices]
-
-#     train_dataset = ImageDataset(train_data, transform=transform)
-#     val_dataset = ImageDataset(val_data, transform=transform)
-
-#     train_loader = DataLoader(train_dataset, batch_size=128, shuffle=True, num_workers=4)
-#     val_loader = DataLoader(val_dataset, batch_size=128, shuffle=True, num_workers=4)
-
-#     return train_loader, val_loader
 
 def init_weights_he(m):
     if isinstance(m, nn.Conv2d) or isinstance(m, nn.Linear):
@@ -126,7 +111,7 @@ def k_fold_cross_validation(k, model):
         model.apply(init_weights_he)
 
         # Initialize a new optimizer and set the trainer's optimizer
-        optimizer = torch.optim.Adam(model.parameters(), lr=1e-4, weight_decay=1e-5)
+        optimizer = torch.optim.Adam(model.parameters(), lr=1e-5, weight_decay=5e-4)
         trainer.optimizer = optimizer
 
         train_losses, train_accuracies, val_losses, val_accuracies = trainer.fit(model, train_loader, val_loader)
@@ -140,34 +125,13 @@ def k_fold_cross_validation(k, model):
     return all_train_losses, all_train_accuracies, all_val_losses, all_val_accuracies
 
 
-# def train_and_evaluate(trainer, model):
-#     train_loader, val_loader = split_data(test_size=0.2)
-#     trainer.fit(model, train_loader, val_loader)
 
-#     # Plot Training and Validation Loss
-#     plt.figure(figsize=(10, 6))
-#     plt.subplot(2, 1, 1)
-#     plt.plot(trainer.train_losses, label="Training Loss")
-#     plt.plot(trainer.val_losses, label="Validation Loss")
-#     plt.xlabel("Epochs")
-#     plt.ylabel("Loss")
-#     plt.legend()
-
-#     # Plot Training and Validation Accuracy
-#     plt.subplot(2, 1, 2)
-#     plt.plot(trainer.train_accuracies, label="Training Accuracy")
-#     plt.plot(trainer.val_accuracies, label="Validation Accuracy")
-#     plt.xlabel("Epochs")
-#     plt.ylabel("Accuracy")
-#     plt.legend()
-
-#     plt.savefig()
 
 
 class BasicBlock(nn.Module):
     expansion = 1
 
-    def __init__(self, in_planes, planes, stride=1, dropout_rate=0.2):
+    def __init__(self, in_planes, planes, stride=1, dropout_rate=0):
         super(BasicBlock, self).__init__()
 
         # First convolutional layer
@@ -209,7 +173,7 @@ class BasicBlock(nn.Module):
 
 
 class ResNet18(nn.Module):
-    def __init__(self, num_classes=8, dropout_rate=0.2):  # Add dropout_rate parameter
+    def __init__(self, num_classes=8, dropout_rate=0):  # Add dropout_rate parameter
         super(ResNet18, self).__init__()
 
         self.in_planes = 64
@@ -218,11 +182,12 @@ class ResNet18(nn.Module):
         self.conv1 = nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1, bias=False)
         self.bn1 = nn.BatchNorm2d(64)
 
+
         # ResNet blocks
-        self.layer1 = self._make_layer(64, 2, stride=1)
-        self.layer2 = self._make_layer(128, 2, stride=2)
-        self.layer3 = self._make_layer(256, 2, stride=2)
-        self.layer4 = self._make_layer(512, 2, stride=2)
+        self.layer1 = self._make_layer(64, 2, stride=1, dropout_rate=dropout_rate)
+        self.layer2 = self._make_layer(128, 2, stride=2, dropout_rate=dropout_rate)
+        self.layer3 = self._make_layer(256, 2, stride=2, dropout_rate=dropout_rate)
+        self.layer4 = self._make_layer(512, 2, stride=2, dropout_rate=dropout_rate)
 
         # Final fully connected layer
         self.linear = nn.Linear(512, num_classes)
@@ -245,6 +210,7 @@ class ResNet18(nn.Module):
     # First convolutional layer
         out = F.relu(self.bn1(self.conv1(x)))
 
+
     # ResNet blocks
         out = self.layer1(out)
         out = self.layer2(out)
@@ -261,7 +227,6 @@ class ResNet18(nn.Module):
         out = self.linear(out)
 
         return out  
-
 
 
 class CustomTrainer(d2l.Trainer):
@@ -356,7 +321,7 @@ class CustomTrainer(d2l.Trainer):
         plt.ylabel("Accuracy")
         plt.legend()
 
-        plt.savefig("metrics_plot3.png")
+        plt.savefig("metrics_plot_18_no_cifar.png")
         plt.show()
 
 
@@ -365,7 +330,7 @@ if __name__ == '__main__':
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    model = ResNet18(num_classes=8, dropout_rate=0.2)
+    model = ResNet18(num_classes=8, dropout_rate=0)
     model = model.to(device)
 
     # Save the initial model's state_dict for later use
@@ -374,7 +339,7 @@ if __name__ == '__main__':
     loss_fn = torch.nn.CrossEntropyLoss()
     trainer = CustomTrainer(optimizer=None, loss_fn=loss_fn, device=device, max_epochs=100)
 
-    train_losses, train_accuracies, val_losses, val_accuracies = k_fold_cross_validation(3, model)
+    train_losses, train_accuracies, val_losses, val_accuracies = k_fold_cross_validation(2, model)
 
     # Update trainer's attributes with the average values from k-fold cross-validation
     trainer.train_losses = [np.mean(epoch_losses) for epoch_losses in zip(*train_losses)]
